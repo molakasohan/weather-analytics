@@ -1,0 +1,38 @@
+"""
+SQLite Database Query & Viewer Script
+
+Provides clean text output for inspecting tables and running SQL queries
+on data/weather_database.db.
+"""
+
+import os
+import sqlite3
+import pandas as pd
+
+DB_PATH = os.path.join("data", "weather_database.db")
+
+
+def inspect_database():
+    if not os.path.exists(DB_PATH):
+        print(f"[ERROR] Database file {DB_PATH} not found.")
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    
+    # List all tables in SQLite database
+    tables_df = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table';", conn)
+    print("=== SQLITE DATABASE TABLES ===")
+    print(tables_df.to_string(index=False))
+    print("==============================\n")
+
+    for table_name in tables_df["name"]:
+        print(f"--- Table: {table_name} ---")
+        df = pd.read_sql_query(f"SELECT * FROM {table_name} LIMIT 10;", conn)
+        print(df.to_string(index=False))
+        print("\n")
+
+    conn.close()
+
+
+if __name__ == "__main__":
+    inspect_database()
