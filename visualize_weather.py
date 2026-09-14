@@ -1,20 +1,24 @@
 """
-Telangana Weather Analytics Multi-Chart Dashboard Generator
+Telangana Weather Analytics Multi-Chart Dashboard & Archive Generator
 
-Generates high-resolution visualization dashboards featuring a diverse set of chart types:
-1. Line Chart with Shaded Area & Average Reference: District Temperatures (°C).
-2. Scatter / Bubble Plot: Temperature vs. Humidity (Bubble Size = Wind Speed).
-3. Horizontal Bar Chart: Top 10 High Humidity Districts.
-4. Metric Card: Statewide Aggregate Statistics.
+Generates and archives high-resolution visual dashboards:
+1. Main Dashboard: data/weather_dashboard.png
+2. Daily Picture Archive: data/daily_charts/weather_dashboard_YYYY-MM-DD.png
+3. Monthly Picture Archive: data/monthly_charts/monthly_dashboard_YYYY-MM.png
 """
 
 import os
+import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
 EXCEL_PATH = os.path.join("data", "weather_data.xlsx")
+DB_PATH = os.path.join("data", "weather_database.db")
+
 OUTPUT_IMAGE = os.path.join("data", "weather_dashboard.png")
+DAILY_CHARTS_DIR = os.path.join("data", "daily_charts")
+MONTHLY_CHARTS_DIR = os.path.join("data", "monthly_charts")
 
 
 def generate_telangana_visualizations():
@@ -30,8 +34,8 @@ def generate_telangana_visualizations():
     else:
         dist_df = pd.read_excel(EXCEL_PATH)
 
-    # Filter latest date records
     latest_date = dist_df["date"].max()
+    latest_month = str(latest_date)[:7]
     today_df = dist_df[dist_df["date"] == latest_date].sort_values("district")
 
     # Load State Summary
@@ -75,7 +79,7 @@ def generate_telangana_visualizations():
     ax_line.grid(True, linestyle="--", alpha=0.2, color="#94a3b8")
     ax_line.legend(loc="upper right", facecolor="#1e293b", edgecolor="#475569", labelcolor="#f8fafc")
 
-    # --- 2. Scatter / Bubble Plot: Temperature vs Humidity (Bubble Size = Wind Speed) ---
+    # --- 2. Scatter / Bubble Plot: Temperature vs Humidity ---
     humidity = today_df["humidity_%"].values
     wind_speeds = today_df["wind_speed_kmh"].values
     bubble_sizes = wind_speeds * 25 + 30  # Scale for visibility
@@ -90,11 +94,6 @@ def generate_telangana_visualizations():
     cbar.ax.set_ylabel("Temp Intensity (°C)", color="#94a3b8")
     cbar.ax.tick_params(colors="#94a3b8")
 
-    # Annotate top extreme points in scatter
-    for i, txt in enumerate(districts):
-        if temps[i] == np.max(temps) or temps[i] == np.min(temps) or humidity[i] == np.max(humidity):
-            ax_scatter.annotate(txt, (temps[i] + 0.1, humidity[i] + 0.5), color="#f8fafc", fontsize=8, fontweight="bold")
-
     # --- 3. Overall Telangana State Summary Card ---
     ax_card.axis("off")
     
@@ -102,7 +101,7 @@ def generate_telangana_visualizations():
         summary_text = (
             f"TELANGANA STATE OVERALL SUMMARY REPORT\n"
             f"--------------------------------------------------\n\n"
-            f"Date: {latest_date}\n"
+            f"Date: {latest_date} | Month: {latest_month}\n"
             f"Total Districts Monitored: {latest_summary.get('total_districts_monitored', 33)}\n\n"
             f"State Avg Temperature: {latest_summary.get('state_avg_temp_C', 'N/A')} °C\n"
             f"Hottest District: {latest_summary.get('hottest_district', 'N/A')} ({latest_summary.get('max_temp_C', 'N/A')} °C)\n"
@@ -126,8 +125,22 @@ def generate_telangana_visualizations():
 
     fig.suptitle("Telangana Weather Multi-Chart Analytics Dashboard", color="#f8fafc", fontsize=20, fontweight="bold", y=0.98)
     
+    # Save main dashboard
     plt.savefig(OUTPUT_IMAGE, dpi=300, bbox_inches="tight")
-    print(f"[SUCCESS] Multi-Chart Dashboard saved to {OUTPUT_IMAGE}")
+    
+    # Archive Daily Picture
+    os.makedirs(DAILY_CHARTS_DIR, exist_ok=True)
+    daily_path = os.path.join(DAILY_CHARTS_DIR, f"weather_dashboard_{latest_date}.png")
+    plt.savefig(daily_path, dpi=300, bbox_inches="tight")
+
+    # Archive Monthly Picture
+    os.makedirs(MONTHLY_CHARTS_DIR, exist_ok=True)
+    monthly_path = os.path.join(MONTHLY_CHARTS_DIR, f"monthly_dashboard_{latest_month}.png")
+    plt.savefig(monthly_path, dpi=300, bbox_inches="tight")
+
+    print(f"[SUCCESS] Saved main dashboard: {OUTPUT_IMAGE}", flush=True)
+    print(f"[SUCCESS] Archived daily chart: {daily_path}", flush=True)
+    print(f"[SUCCESS] Archived monthly chart: {monthly_path}", flush=True)
     plt.close()
 
 

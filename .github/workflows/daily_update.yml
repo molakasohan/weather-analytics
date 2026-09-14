@@ -27,15 +27,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Fetch weather & update visualization dashboard
+      - name: Fetch weather data, update SQL DB, Excel & generate daily/monthly chart pictures
         run: |
           python fetch_weather.py
           python visualize_weather.py
 
-      - name: Commit and push updated dataset and dashboard
+      - name: Commit and push updated dataset, SQL DB, and chart picture archives
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/weather_data.xlsx data/weather_dashboard.png
-          git commit -m "Automated daily weather update [$(date +'%Y-%m-%d')]" || echo "No data changes to commit."
+          git add data/
+          git commit -m "Automated daily weather ETL update [$(date +'%Y-%m-%d')]" || echo "No data changes to commit."
           git push

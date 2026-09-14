@@ -1,13 +1,14 @@
 """
-Telangana State & District Daily Weather Collector (Fast Parallel ETL)
+Telangana State & District Daily Weather Collector (SQLite + Excel ETL)
 
-Fetches live daily weather metrics for all 33 Telangana districts via Open-Meteo API using parallel threading.
-Generates both individual district daily reports and overall Telangana state summary reports,
-logging the data into Excel for analytics and dashboarding.
+Fetches daily weather metrics for all 33 Telangana districts via Open-Meteo API using parallel threads.
+Stores records in both an embedded SQLite database (data/weather_database.db) and multi-sheet Excel file (data/weather_data.xlsx).
+Generates daily district reports, state summaries, and aggregated monthly reports.
 """
 
 import os
 import sys
+import sqlite3
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List
@@ -52,6 +53,7 @@ TELANGANA_DISTRICTS = [
 ]
 
 EXCEL_PATH = os.path.join("data", "weather_data.xlsx")
+DB_PATH = os.path.join("data", "weather_database.db")
 API_URL = "https://api.open-meteo.com/v1/forecast"
 
 
@@ -133,8 +135,96 @@ def generate_state_summary(district_records: List[Dict[str, Any]], date_str: str
     return summary
 
 
+def update_sqlite_database(district_df: pd.DataFrame, summary_df: pd.DataFrame, db_path: str = DB_PATH):
+    """Saves daily weather records into SQLite SQL database tables."""
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Create tables if not exists
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS district_daily_weather (
+        date TEXT,
+        district TEXT,
+        state TEXT,
+        temperature_C REAL,
+        humidity_pct REAL,
+        precipitation_mm REAL,
+        wind_speed_kmh REAL,
+        weather_code INTEGER,
+        observation_time TEXT,
+        PRIMARY KEY (date, district)
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS telangana_state_summary (
+        date TEXT PRIMARY KEY,
+        state TEXT,
+        total_districts_monitored INTEGER,
+        state_avg_temp_C REAL,
+        hottest_district TEXT,
+        max_temp_C REAL,
+        coolest_district TEXT,
+        min_temp_C REAL,
+        state_avg_humidity_pct REAL,
+        total_state_rainfall_mm REAL,
+        rainiest_district TEXT,
+        max_rainfall_mm REAL,
+        windiest_district TEXT,
+        max_wind_speed_kmh REAL
+    )
+    """)
+
+    # Insert or Replace district rows
+    for _, row in district_df.iterrows():
+        cursor.execute("""
+        INSERT OR REPLACE INTO district_daily_weather
+        (date, district, state, temperature_C, humidity_pct, precipitation_mm, wind_speed_kmh, weather_code, observation_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            row["date"], row["district"], row["state"], row["temperature_C"],
+            row["humidity_%"], row["precipitation_mm"], row["wind_speed_kmh"],
+            row["weather_code"], row["observation_time"]
+        ))
+
+    # Insert or Replace state summary row
+    for _, s in summary_df.iterrows():
+        cursor.execute("""
+        INSERT OR REPLACE INTO telangana_state_summary
+        (date, state, total_districts_monitored, state_avg_temp_C, hottest_district, max_temp_C,
+         coolest_district, min_temp_C, state_avg_humidity_pct, total_state_rainfall_mm, rainiest_district, max_rainfall_mm, windiest_district, max_wind_speed_kmh)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            s["date"], s["state"], s["total_districts_monitored"], s["state_avg_temp_C"],
+            s["hottest_district"], s["max_temp_C"], s["coolest_district"], s["min_temp_C"],
+            s["state_avg_humidity_%"], s["total_state_rainfall_mm"], s["rainiest_district"],
+            s["max_rainfall_mm"], s["windiest_district"], s["max_wind_speed_kmh"]
+        ))
+
+    conn.commit()
+
+    # Generate Monthly District Aggregated Table in SQL
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS monthly_district_summary AS
+    SELECT 
+        strftime('%Y-%m', date) AS month,
+        district,
+        ROUND(AVG(temperature_C), 1) AS monthly_avg_temp_C,
+        MAX(temperature_C) AS monthly_max_temp_C,
+        MIN(temperature_C) AS monthly_min_temp_C,
+        ROUND(AVG(humidity_pct), 1) AS monthly_avg_humidity_pct,
+        ROUND(SUM(precipitation_mm), 1) AS monthly_total_rain_mm
+    FROM district_daily_weather
+    GROUP BY month, district
+    """)
+
+    conn.close()
+    print(f"[SUCCESS] Updated SQL database at {db_path}.", flush=True)
+
+
 def update_excel_reports(district_records: List[Dict[str, Any]], state_summary: Dict[str, Any], file_path: str = EXCEL_PATH):
-    """Saves district daily data and overall state summary to multi-sheet Excel file."""
+    """Saves district daily data, state summary, and monthly summary to multi-sheet Excel file."""
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     today_str = datetime.now().strftime("%Y-%m-%d")
     
@@ -166,11 +256,23 @@ def update_excel_reports(district_records: List[Dict[str, Any]], state_summary: 
         combined_dist = new_dist_df
         combined_sum = new_sum_df
 
-    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
-        combined_dist.to_excel(writer, sheet_name="District_Daily_Data", index=False)
-        combined_sum.to_excel(writer, sheet_name="Telangana_State_Summary", index=False)
+    # Calculate Monthly Aggregate Report
+    combined_dist["month"] = pd.to_datetime(combined_dist["date"]).dt.strftime("%Y-%m")
+    monthly_report = combined_dist.groupby(["month", "district"]).agg(
+        monthly_avg_temp_C=("temperature_C", lambda x: round(x.mean(), 1)),
+        monthly_max_temp_C=("temperature_C", "max"),
+        monthly_min_temp_C=("temperature_C", "min"),
+        monthly_avg_humidity_pct=("humidity_%", lambda x: round(x.mean(), 1)),
+        monthly_total_rain_mm=("precipitation_mm", lambda x: round(x.sum(), 1))
+    ).reset_index()
 
-    print(f"[SUCCESS] Updated 'District_Daily_Data' ({len(district_records)} districts) & 'Telangana_State_Summary' in {file_path}.", flush=True)
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+        combined_dist.drop(columns=["month"], errors="ignore").to_excel(writer, sheet_name="District_Daily_Data", index=False)
+        combined_sum.to_excel(writer, sheet_name="Telangana_State_Summary", index=False)
+        monthly_report.to_excel(writer, sheet_name="Monthly_Summary", index=False)
+
+    print(f"[SUCCESS] Updated 'District_Daily_Data', 'Telangana_State_Summary' & 'Monthly_Summary' in {file_path}.", flush=True)
+    return combined_dist, combined_sum
 
 
 def main():
@@ -179,7 +281,8 @@ def main():
     
     if district_records:
         state_summary = generate_state_summary(district_records, today_str)
-        update_excel_reports(district_records, state_summary)
+        dist_df, sum_df = update_excel_reports(district_records, state_summary)
+        update_sqlite_database(pd.DataFrame(district_records), pd.DataFrame([state_summary]))
         
         print("\n=== TELANGANA STATE DAILY WEATHER OVERVIEW ===", flush=True)
         print(f"Date: {state_summary['date']}", flush=True)
@@ -188,7 +291,6 @@ def main():
         print(f"Coolest District: {state_summary['coolest_district']} ({state_summary['min_temp_C']} deg C)", flush=True)
         print(f"State Avg Humidity: {state_summary['state_avg_humidity_%']} %", flush=True)
         print(f"Total State Rain: {state_summary['total_state_rainfall_mm']} mm", flush=True)
-        print(f"Rainiest District: {state_summary['rainiest_district']} ({state_summary['max_rainfall_mm']} mm)", flush=True)
         print("===============================================\n", flush=True)
 
 
