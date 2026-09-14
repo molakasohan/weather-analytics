@@ -1,10 +1,3 @@
-"""
-SQLite Database Query & Viewer Script
-
-Provides clean text output for inspecting tables and running SQL queries
-on data/weather_database.db.
-"""
-
 import os
 import sqlite3
 import pandas as pd
@@ -18,8 +11,6 @@ def inspect_database():
         return
 
     conn = sqlite3.connect(DB_PATH)
-    
-    # List all tables in SQLite database
     tables_df = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table';", conn)
     print("=== SQLITE DATABASE TABLES ===")
     print(tables_df.to_string(index=False))
