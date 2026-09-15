@@ -26,13 +26,26 @@ def generate_telangana_visualizations():
         print(f"[ERROR] Data file {EXCEL_PATH} does not exist.")
         return
 
-    excel_file = pd.ExcelFile(EXCEL_PATH)
-    
+    try:
+        excel_file = pd.ExcelFile(EXCEL_PATH)
+    except Exception as exc:
+        print(f"[ERROR] Unable to read Excel data file: {exc}")
+        return
+
     # Load District Data
     if "District_Daily_Data" in excel_file.sheet_names:
         dist_df = pd.read_excel(EXCEL_PATH, sheet_name="District_Daily_Data")
     else:
         dist_df = pd.read_excel(EXCEL_PATH)
+
+    if dist_df.empty:
+        print("[ERROR] The Excel workbook has no district weather data to visualize.")
+        return
+
+    dist_df = dist_df.dropna(subset=["date", "district"]).copy()
+    if dist_df.empty:
+        print("[ERROR] No valid district weather rows were found in the workbook.")
+        return
 
     latest_date = dist_df["date"].max()
     latest_month = str(latest_date)[:7]
@@ -41,7 +54,12 @@ def generate_telangana_visualizations():
     # Load State Summary
     if "Telangana_State_Summary" in excel_file.sheet_names:
         state_df = pd.read_excel(EXCEL_PATH, sheet_name="Telangana_State_Summary")
-        latest_summary = state_df[state_df["date"] == latest_date].iloc[-1].to_dict()
+        state_df = state_df.dropna(subset=["date"]).copy()
+        latest_summary = state_df[state_df["date"] == latest_date]
+        if not latest_summary.empty:
+            latest_summary = latest_summary.iloc[-1].to_dict()
+        else:
+            latest_summary = {}
     else:
         latest_summary = {}
 
