@@ -10,6 +10,8 @@ import os
 import sys
 import sqlite3
 import time
+import argparse
+import subprocess
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List
@@ -265,6 +267,7 @@ def generate_state_summary(district_records: List[Dict[str, Any]], date_str: str
 
     summary = {
         "date": date_str,
+        "observation_time": district_records[0].get("observation_time"),
         "state": "Telangana",
         "total_districts_monitored": len(df),
         "state_avg_temp_C": round(df["temperature_C"].mean(), 1),
@@ -283,10 +286,19 @@ def generate_state_summary(district_records: List[Dict[str, Any]], date_str: str
 
 
 def update_sqlite_database(district_df: pd.DataFrame, summary_df: pd.DataFrame, db_path: str = DB_PATH):
-    """Saves daily weather records into SQLite SQL database tables."""
+    """Saves hourly weather observations into SQLite database tables."""
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+
+    district_columns = [row[1] for row in cursor.execute("PRAGMA table_info(district_daily_weather)")]
+    district_keys = [row[0] for row in cursor.execute("SELECT name FROM pragma_table_info('district_daily_weather') WHERE pk > 0 ORDER BY pk")]
+    if district_columns and district_keys != ["date", "district", "observation_time"]:
+        cursor.execute("ALTER TABLE district_daily_weather RENAME TO district_daily_weather_legacy")
+
+    summary_columns = [row[1] for row in cursor.execute("PRAGMA table_info(telangana_state_summary)")]
+    if summary_columns and "observation_time" not in summary_columns:
+        cursor.execute("ALTER TABLE telangana_state_summary RENAME TO telangana_state_summary_legacy")
 
     # Create tables if not exists
     cursor.execute("""
@@ -300,13 +312,14 @@ def update_sqlite_database(district_df: pd.DataFrame, summary_df: pd.DataFrame, 
         wind_speed_kmh REAL,
         weather_code INTEGER,
         observation_time TEXT,
-        PRIMARY KEY (date, district)
+        PRIMARY KEY (date, district, observation_time)
     )
     """)
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS telangana_state_summary (
-        date TEXT PRIMARY KEY,
+        date TEXT,
+        observation_time TEXT,
         state TEXT,
         total_districts_monitored INTEGER,
         state_avg_temp_C REAL,
@@ -319,9 +332,30 @@ def update_sqlite_database(district_df: pd.DataFrame, summary_df: pd.DataFrame, 
         rainiest_district TEXT,
         max_rainfall_mm REAL,
         windiest_district TEXT,
-        max_wind_speed_kmh REAL
+        max_wind_speed_kmh REAL,
+        PRIMARY KEY (date, observation_time)
     )
     """)
+
+    if district_columns and district_keys != ["date", "district", "observation_time"]:
+        cursor.execute("""
+        INSERT OR IGNORE INTO district_daily_weather
+        SELECT date, district, state, temperature_C, humidity_pct, precipitation_mm,
+               wind_speed_kmh, weather_code, observation_time
+        FROM district_daily_weather_legacy
+        """)
+        cursor.execute("DROP TABLE district_daily_weather_legacy")
+
+    if summary_columns and "observation_time" not in summary_columns:
+        cursor.execute("""
+        INSERT OR IGNORE INTO telangana_state_summary
+        SELECT date, date || 'T00:00', state, total_districts_monitored, state_avg_temp_C,
+               hottest_district, max_temp_C, coolest_district, min_temp_C,
+               state_avg_humidity_pct, total_state_rainfall_mm, rainiest_district,
+               max_rainfall_mm, windiest_district, max_wind_speed_kmh
+        FROM telangana_state_summary_legacy
+        """)
+        cursor.execute("DROP TABLE telangana_state_summary_legacy")
 
     # Insert or Replace district rows
     for _, row in district_df.iterrows():
@@ -339,11 +373,11 @@ def update_sqlite_database(district_df: pd.DataFrame, summary_df: pd.DataFrame, 
     for _, s in summary_df.iterrows():
         cursor.execute("""
         INSERT OR REPLACE INTO telangana_state_summary
-        (date, state, total_districts_monitored, state_avg_temp_C, hottest_district, max_temp_C,
+        (date, observation_time, state, total_districts_monitored, state_avg_temp_C, hottest_district, max_temp_C,
          coolest_district, min_temp_C, state_avg_humidity_pct, total_state_rainfall_mm, rainiest_district, max_rainfall_mm, windiest_district, max_wind_speed_kmh)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            s["date"], s["state"], s["total_districts_monitored"], s["state_avg_temp_C"],
+            s["date"], s["observation_time"], s["state"], s["total_districts_monitored"], s["state_avg_temp_C"],
             s["hottest_district"], s["max_temp_C"], s["coolest_district"], s["min_temp_C"],
             s["state_avg_humidity_%"], s["total_state_rainfall_mm"], s["rainiest_district"],
             s["max_rainfall_mm"], s["windiest_district"], s["max_wind_speed_kmh"]
@@ -385,14 +419,12 @@ def update_excel_reports(district_records: List[Dict[str, Any]], state_summary: 
             
             if "District_Daily_Data" in excel_file.sheet_names:
                 existing_dist = pd.read_excel(file_path, sheet_name="District_Daily_Data")
-                existing_dist = existing_dist[existing_dist["date"] != today_str]
                 combined_dist = pd.concat([existing_dist, new_dist_df], ignore_index=True)
             else:
                 combined_dist = new_dist_df
 
             if "Telangana_State_Summary" in excel_file.sheet_names:
                 existing_sum = pd.read_excel(file_path, sheet_name="Telangana_State_Summary")
-                existing_sum = existing_sum[existing_sum["date"] != today_str]
                 combined_sum = pd.concat([existing_sum, new_sum_df], ignore_index=True)
             else:
                 combined_sum = new_sum_df
@@ -403,6 +435,13 @@ def update_excel_reports(district_records: List[Dict[str, Any]], state_summary: 
     else:
         combined_dist = new_dist_df
         combined_sum = new_sum_df
+
+    combined_dist = combined_dist.drop_duplicates(
+        subset=["date", "district", "observation_time"], keep="last"
+    )
+    combined_sum = combined_sum.drop_duplicates(
+        subset=["date", "observation_time"], keep="last"
+    )
 
     # Calculate Monthly Aggregate Report
     combined_dist["month"] = pd.to_datetime(combined_dist["date"]).dt.strftime("%Y-%m")
@@ -424,29 +463,30 @@ def update_excel_reports(district_records: List[Dict[str, Any]], state_summary: 
 
 
 def main():
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    district_records = fetch_all_telangana_districts()
+    parser = argparse.ArgumentParser(description="Fetch Telangana weather hourly or once.")
+    parser.add_argument("--watch", action="store_true", help="Refresh live weather at the start of every hour.")
+    args = parser.parse_args()
 
-    if not district_records:
-        print("[ERROR] No district weather records were retrieved. No files were updated.", flush=True)
-        return
+    while True:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        district_records = fetch_all_telangana_districts()
 
-    state_summary = generate_state_summary(district_records, today_str)
-    if not state_summary:
-        print("[ERROR] Unable to generate a state summary from the retrieved district data.", flush=True)
-        return
+        if district_records:
+            state_summary = generate_state_summary(district_records, today_str)
+            if state_summary:
+                update_excel_reports(district_records, state_summary)
+                update_sqlite_database(pd.DataFrame(district_records), pd.DataFrame([state_summary]))
+                print(f"[SUCCESS] Stored hourly observation {state_summary['observation_time']}.", flush=True)
+                subprocess.run([sys.executable, "visualize_weather.py"], check=False)
+        else:
+            print("[ERROR] No district weather records were retrieved. No files were updated.", flush=True)
 
-    dist_df, sum_df = update_excel_reports(district_records, state_summary)
-    update_sqlite_database(pd.DataFrame(district_records), pd.DataFrame([state_summary]))
+        if not args.watch:
+            break
 
-    print("\n=== TELANGANA STATE DAILY WEATHER OVERVIEW ===", flush=True)
-    print(f"Date: {state_summary['date']}", flush=True)
-    print(f"State Avg Temp: {state_summary['state_avg_temp_C']} deg C", flush=True)
-    print(f"Hottest District: {state_summary['hottest_district']} ({state_summary['max_temp_C']} deg C)", flush=True)
-    print(f"Coolest District: {state_summary['coolest_district']} ({state_summary['min_temp_C']} deg C)", flush=True)
-    print(f"State Avg Humidity: {state_summary['state_avg_humidity_%']} %", flush=True)
-    print(f"Total State Rain: {state_summary['total_state_rainfall_mm']} mm", flush=True)
-    print("===============================================\n", flush=True)
+        seconds_until_next_hour = 3600 - (time.time() % 3600) + 5
+        print(f"[INFO] Next hourly refresh in about {int(seconds_until_next_hour)} seconds.", flush=True)
+        time.sleep(seconds_until_next_hour)
 
 
 if __name__ == "__main__":

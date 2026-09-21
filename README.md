@@ -12,7 +12,7 @@ An end-to-end data analytics and ETL project monitoring real-time weather metric
   - **Excel Workbook (`data/weather_data.xlsx`)**: Multi-sheet file containing `District_Daily_Data`, `Telangana_State_Summary`, and `Monthly_Summary`.
 - **Advanced Visual Analytics**: Script (`visualize_weather.py`) generates multi-chart dashboards featuring Temperature Line Charts, Temperature vs. Humidity Scatter/Bubble Plots, and State Metric Cards.
 - **Automated Picture Archiving**: Saves dated daily charts (`data/daily_charts/`) and monthly report charts (`data/monthly_charts/`).
-- **CI/CD Automation**: GitHub Actions workflow (`.github/workflows/daily_update.yml`) runs daily at 09:00 AM IST (03:30 UTC), automatically auto-committing updated databases, Excel sheets, and chart pictures.
+- **Hourly Automation**: Run `python fetch_weather.py --watch` to fetch live observations at the start of every hour, update the database and Excel workbook, and regenerate the dashboard.
 
 ---
 
@@ -50,6 +50,11 @@ pip install -r requirements.txt
 ### 2. Run the Full Pipeline
 ```powershell
 python fetch_weather.py; python visualize_weather.py
+```
+
+### Keep the dashboard updated every hour
+```powershell
+python fetch_weather.py --watch
 ```
 
 ---

@@ -1,9 +1,9 @@
-name: Daily Weather Data Update
+name: Hourly Weather Data Update
 
 on:
   schedule:
-    # Runs daily at 03:30 UTC (09:00 AM IST)
-    - cron: '30 3 * * *'
+    # Runs at the start of every hour
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,5 +37,5 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git commit -m "Automated daily weather ETL update [$(date +'%Y-%m-%d')]" || echo "No data changes to commit."
+          git commit -m "Automated hourly weather ETL update [$(date +'%Y-%m-%d %H:00')]" || echo "No data changes to commit."
           git push

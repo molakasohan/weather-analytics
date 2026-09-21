@@ -20,6 +20,11 @@ python visualize_weather.py
 python fetch_weather.py; python visualize_weather.py
 ```
 
+### Automatically refresh every hour
+```powershell
+python fetch_weather.py --watch
+```
+
 ---
 
 ### 3. Push Updates to Git
