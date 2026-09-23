@@ -35,12 +35,15 @@ weather-analytics/
 ├── query_db.py                    # Database query & inspection helper script
 ├── requirements.txt               # Required Python package dependencies
 ├── RUN_INSTRUCTIONS.md            # Quick execution guide
+├── PROJECT_DOCUMENTATION.md       # Complete step-by-step documentation
 └── README.md                      # Project documentation
 ```
 
 ---
 
 ## 🚀 Quick Start & Local Setup
+
+For the complete installation, pipeline, database, dashboard, automation, Git, and troubleshooting guide, read [`PROJECT_DOCUMENTATION.md`](PROJECT_DOCUMENTATION.md).
 
 ### 1. Install Dependencies
 ```bash
@@ -63,7 +66,7 @@ python fetch_weather.py --watch
 
 1. Push this repository to GitHub.
 2. Under **Settings → Actions → General → Workflow permissions**, enable **"Read and write permissions"**.
-3. The workflow triggers daily at `03:30 UTC` (09:00 AM IST) automatically or manually under the **Actions** tab using **Workflow Dispatch**.
+3. The workflow runs hourly at minute `00` UTC automatically or manually under the **Actions** tab using **Workflow Dispatch**.
 
 ---
 

@@ -1,5 +1,7 @@
 # 🚀 How to Run the Weather Analytics Program
 
+For full step-by-step documentation, see [`PROJECT_DOCUMENTATION.md`](PROJECT_DOCUMENTATION.md).
+
 ### 1. Install Dependencies
 ```bash
 pip install -r requirements.txt
@@ -37,8 +39,8 @@ git push origin main
 ---
 
 ### 📂 Generated Output Files & Archives
-- **SQLite Database**: [`data/weather_database.db`](file:///c:/Users/sohan/OneDrive/Desktop/codegnan/project%206/data/weather_database.db)
-- **Excel Dataset**: [`data/weather_data.xlsx`](file:///c:/Users/sohan/OneDrive/Desktop/codegnan/project%206/data/weather_data.xlsx)
-- **Latest Dashboard Image**: [`data/weather_dashboard.png`](file:///c:/Users/sohan/OneDrive/Desktop/codegnan/project%206/data/weather_dashboard.png)
-- **Daily Picture Archive**: [`data/daily_charts/`](file:///c:/Users/sohan/OneDrive/Desktop/codegnan/project%206/data/daily_charts/)
-- **Monthly Picture Archive**: [`data/monthly_charts/`](file:///c:/Users/sohan/OneDrive/Desktop/codegnan/project%206/data/monthly_charts/)
+- **SQLite Database**: [`data/weather_database.db`](data/weather_database.db)
+- **Excel Dataset**: [`data/weather_data.xlsx`](data/weather_data.xlsx)
+- **Latest Dashboard Image**: [`data/weather_dashboard.png`](data/weather_dashboard.png)
+- **Daily Picture Archive**: [`data/daily_charts/`](data/daily_charts/)
+- **Monthly Picture Archive**: [`data/monthly_charts/`](data/monthly_charts/)
