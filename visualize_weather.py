@@ -47,16 +47,21 @@ def generate_telangana_visualizations():
         print("[ERROR] No valid district weather rows were found in the workbook.")
         return
 
-    latest_observation = dist_df["observation_time"].astype(str).max()
-    latest_date = dist_df.loc[dist_df["observation_time"].astype(str) == latest_observation, "date"].iloc[0]
+    dist_df["observation_time"] = dist_df["observation_time"].astype(str)
+    latest_date = dist_df["date"].astype(str).max()
+    latest_day_df = dist_df[dist_df["date"].astype(str) == latest_date].copy()
+    latest_day_df = latest_day_df.sort_values("observation_time").drop_duplicates(
+        subset=["district"], keep="last"
+    )
+    latest_observation = latest_day_df["observation_time"].max()
     latest_month = str(latest_date)[:7]
-    today_df = dist_df[dist_df["observation_time"].astype(str) == latest_observation].sort_values("district")
+    today_df = latest_day_df.sort_values("district")
 
     # Load State Summary
     if "Telangana_State_Summary" in excel_file.sheet_names:
         state_df = pd.read_excel(EXCEL_PATH, sheet_name="Telangana_State_Summary")
         state_df = state_df.dropna(subset=["date"]).copy()
-        latest_summary = state_df[state_df["observation_time"].astype(str) == latest_observation]
+        latest_summary = state_df[state_df["date"].astype(str) == latest_date]
         if not latest_summary.empty:
             latest_summary = latest_summary.iloc[-1].to_dict()
         else:
@@ -92,7 +97,7 @@ def generate_telangana_visualizations():
     ax_line.fill_between(districts, temps, mean_temp, where=(temps < mean_temp), color="#3b82f6", alpha=0.15)
     
     ax_line.axhline(mean_temp, color="#ef4444", linestyle="--", linewidth=1.8, label=f"State Avg Temp ({mean_temp:.1f} °C)")
-    ax_line.set_title(f"Telangana District Temperature Variations — {latest_observation}", color="#f8fafc", fontsize=15, pad=12, fontweight="bold")
+    ax_line.set_title(f"Telangana District Temperature Variations — {latest_date}", color="#f8fafc", fontsize=15, pad=12, fontweight="bold")
     ax_line.set_ylabel("Temperature (°C)", color="#94a3b8")
     ax_line.tick_params(axis="x", rotation=75, labelsize=9)
     ax_line.grid(True, linestyle="--", alpha=0.2, color="#94a3b8")
