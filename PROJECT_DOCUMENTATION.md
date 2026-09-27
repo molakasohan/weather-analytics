@@ -373,12 +373,11 @@ git -c gc.auto=0 rebase origin/main
 
 ### Git push is rejected as non-fast-forward
 
-Do not force-push. Fetch and rebase:
+Do not force-push. Pull and merge remote commits, using the `ours` strategy to prevent merge conflicts on binary weather database and chart image files:
 
 ```powershell
-git -c gc.auto=0 fetch origin
-git -c gc.auto=0 rebase origin/main
-git -c gc.auto=0 push origin main
+git pull origin main --no-rebase -X ours --no-edit
+git push origin main
 ```
 
 ## 15. Recommended Daily Workflow
@@ -390,9 +389,8 @@ python visualize_weather.py
 git status
 git add .
 git commit -m "Update weather analytics data"
-git -c gc.auto=0 fetch origin
-git -c gc.auto=0 rebase origin/main
-git -c gc.auto=0 push origin main
+git pull origin main --no-rebase -X ours --no-edit
+git push origin main
 ```
 
 Use `python fetch_weather.py --watch` instead when continuous hourly local collection is required.
